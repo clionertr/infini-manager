@@ -158,10 +158,10 @@ interface InfiniAccount {
   dailyConsumption: number;
   status?: string;
   userType?: number;
-  google2faIsBound: boolean;
-  googlePasswordIsSet: boolean;
-  isKol: boolean;
-  isProtected: boolean;
+  google2faIsBound: boolean | number; // 兼容数值类型（0/1）和布尔类型
+  googlePasswordIsSet: boolean | number; // 兼容数值类型（0/1）和布尔类型
+  isKol: boolean | number;
+  isProtected: boolean | number;
   cookieExpiresAt?: string;
   infiniCreatedAt?: number;
   lastSyncAt: string;
@@ -1021,7 +1021,7 @@ const AccountDetailModal: React.FC<{
             visible={twoFaModalVisible}
             onClose={handleClose2faModal}
             twoFaInfo={account.twoFaInfo}
-            twoFaEnabled={account.google2faIsBound}
+            twoFaEnabled={!!account.google2faIsBound}
             accountId={account.id.toString()}
             onSuccess={onSuccess}
           />
@@ -1058,7 +1058,10 @@ const AccountDetailModal: React.FC<{
             visible={cardApplyModalVisible}
             onClose={handleCloseCardApply}
             onSuccess={onSuccess}
-            account={account}
+            account={{
+              ...account,
+              google2faIsBound: !!account.google2faIsBound
+            }}
           />
         </>
       )}
@@ -2079,6 +2082,11 @@ const AccountMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [syncingAccount, setSyncingAccount] = useState<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // 服务器端分页状态
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [filters, setFilters] = useState<Record<string, any>>({});
+  const [sortInfo, setSortInfo] = useState<{field?: string, order?: 'asc' | 'desc'}>({});
   const [registerModalVisible, setRegisterModalVisible] = useState(false);
   const [randomUserRegisterModalVisible, setRandomUserRegisterModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -2187,7 +2195,7 @@ const AccountMonitor: React.FC = () => {
         setBatchSyncResult(result);
         setBatchResultModalVisible(true);
         message.success(`批量同步完成: 总计${result.total}个账户, 成功${result.success}个, 失败${result.failed}个`);
-        fetchAccounts(); // 刷新账户列表
+        fetchPaginatedAccounts(); // 使用分页API刷新账户列表
       } else {
         message.error(response.data.message || '批量同步失败');
       }
@@ -2209,17 +2217,95 @@ const AccountMonitor: React.FC = () => {
       const response = await api.post(`${API_BASE_URL}/api/infini-accounts/sync-all-kyc`);
       
       if (response.data.success) {
-        const result = response.data.data as BatchSyncResult;
-        setBatchSyncResult(result);
-        setBatchResultModalVisible(true);
-        message.success(`批量同步KYC信息完成: 总计${result.total}个账户, 成功${result.success}个, 失败${result.failed}个`);
-        fetchAccounts(); // 刷新账户列表
+        message.success('批量同步KYC信息成功');
+        fetchPaginatedAccounts(); // 使用分页API刷新账户列表
       } else {
         message.error(response.data.message || '批量同步KYC信息失败');
+        fetchPaginatedAccounts(); // 即使失败也刷新列表，以确保数据一致性
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || error.message || '批量同步KYC信息失败');
       console.error('批量同步KYC信息失败:', error);
+      fetchPaginatedAccounts(); // 错误情况下也刷新列表，确保UI与服务器数据同步
+    } finally {
+      setBatchSyncing(false);
+    }
+  };
+  
+  // 批量同步所有账户卡片信息
+  const batchSyncAllCards = async () => {
+    try {
+      setBatchSyncing(true);
+      message.info('开始批量同步卡片信息...');
+      
+      // 获取所有账户
+      const accountsResponse = await api.get(`${API_BASE_URL}/api/infini-accounts`);
+      
+      if (!accountsResponse.data.success) {
+        message.error(accountsResponse.data.message || '获取账户列表失败');
+        setBatchSyncing(false);
+        return;
+      }
+      
+      const allAccounts = accountsResponse.data.data || [];
+      const total = allAccounts.length;
+      let success = 0;
+      let failed = 0;
+      const results: Array<{
+        id: number;
+        email: string;
+        success: boolean;
+        message?: string;
+      }> = [];
+      
+      // 遍历所有账户，逐个同步卡片信息
+      for (const account of allAccounts) {
+        try {
+          const syncResponse = await api.post(`${API_BASE_URL}/api/infini-cards/sync`, {
+            accountId: account.id
+          });
+          
+          if (syncResponse.data.success) {
+            success++;
+            results.push({
+              id: account.id,
+              email: account.email,
+              success: true
+            });
+          } else {
+            failed++;
+            results.push({
+              id: account.id,
+              email: account.email,
+              success: false,
+              message: syncResponse.data.message
+            });
+          }
+        } catch (error: any) {
+          failed++;
+          results.push({
+            id: account.id,
+            email: account.email,
+            success: false,
+            message: error.response?.data?.message || error.message || '同步失败'
+          });
+        }
+      }
+      
+      const result: BatchSyncResult = {
+        total,
+        success,
+        failed,
+        accounts: results
+      };
+      
+      setBatchSyncResult(result);
+      setBatchResultModalVisible(true);
+      message.success(`批量同步卡片信息完成: 总计${total}个账户, 成功${success}个, 失败${failed}个`);
+      fetchPaginatedAccounts(); // 使用分页API刷新账户列表
+    } catch (error: any) {
+      message.error(error.response?.data?.message || error.message || '批量同步卡片信息失败');
+      console.error('批量同步卡片信息失败:', error);
     } finally {
       setBatchSyncing(false);
     }
@@ -2412,7 +2498,7 @@ const AccountMonitor: React.FC = () => {
       
       if (response.data.success) {
         message.success('账户信息同步成功');
-        fetchAccounts(); // 刷新账户列表
+        fetchPaginatedAccounts(); // 使用分页API刷新账户列表
       } else {
         message.error(response.data.message || '账户信息同步失败');
       }
@@ -2436,7 +2522,7 @@ const AccountMonitor: React.FC = () => {
       if (response.success) {
         message.success('KYC状态同步成功');
         // 刷新账户列表，确保状态更新
-        await fetchAccounts();
+        await fetchPaginatedAccounts();
       } else {
         message.error(response.message || 'KYC状态同步失败');
       }
@@ -2457,7 +2543,7 @@ const AccountMonitor: React.FC = () => {
       
       if (response.data.success) {
         message.success('账户删除成功');
-        fetchAccounts(); // 刷新账户列表
+        fetchPaginatedAccounts(); // 使用分页API刷新账户列表
       } else {
         message.error(response.data.message || '账户删除失败');
       }
@@ -2728,36 +2814,52 @@ const AccountMonitor: React.FC = () => {
         </Tag>
       ),
     },
+    {
+      title: '已开卡数量',
+      dataIndex: 'cardCount',
+      key: 'cardCount',
+      width: 120,
+      sorter: true, // 支持服务器端排序
+      filters: [
+        { text: '无卡片', value: '=0' },
+        { text: '1-3张', value: '>=1,<=3' },
+        { text: '4-10张', value: '>3,<=10' },
+        { text: '10张以上', value: '>10' }
+      ],
+      render: (text: number) => (
+        <Tag color={text > 0 ? 'blue' : 'default'}>
+          {text || 0}
+        </Tag>
+      )
+    },
   {
-    title: '账户安全',
+    title: '2FA',
     key: 'security',
     width: 180,
     filters: [
       { text: '2FA已绑定', value: '2fa_bound' },
       { text: '2FA未绑定', value: '2fa_unbound' },
-      { text: '受保护', value: 'protected' },
-      { text: '未受保护', value: 'unprotected' },
     ],
+    filterMultiple: false,
     onFilter: (value: any, record: InfiniAccount) => {
       const strValue = value.toString();
       switch (strValue) {
-        case '2fa_bound': return record.google2faIsBound === true;
-        case '2fa_unbound': return record.google2faIsBound === false;
-        case 'protected': return record.isProtected === true;
-        case 'unprotected': return record.isProtected === false;
+        case '2fa_bound': return record.google2faIsBound === true || record.google2faIsBound === 1;
+        case '2fa_unbound': return record.google2faIsBound === false || record.google2faIsBound === 0;
         default: return true;
       }
     },
-    render: (record: InfiniAccount) => (
-      <Space>
-        <Tooltip title={record.google2faIsBound ? "Google 2FA 已绑定" : "Google 2FA 未绑定"}>
-          <Tag color={record.google2faIsBound ? "green" : "orange"}>2FA</Tag>
+    render: (record: InfiniAccount) => {
+      // 判断2FA是否已绑定（兼容数值和布尔值类型）
+      const is2faBound = record.google2faIsBound === true || record.google2faIsBound === 1;
+      return (
+        <Tooltip title={is2faBound ? "Google 2FA 已绑定" : "Google 2FA 未绑定"}>
+          <Tag color={is2faBound ? "green" : "orange"}>
+            {is2faBound ? "已绑定" : "未绑定"}
+          </Tag>
         </Tooltip>
-        <Tooltip title={record.isProtected ? "账户已受保护" : "账户未受保护"}>
-          <Tag color={record.isProtected ? "green" : "red"}>保护</Tag>
-        </Tooltip>
-      </Space>
-    ),
+      );
+    },
   },
   {
     title: '所属分组',
@@ -3234,6 +3336,143 @@ const AccountMonitor: React.FC = () => {
     setFilteredAccounts(filtered);
   };
 
+  // 服务器端分页数据获取
+  const fetchPaginatedAccounts = async (
+    paginationParams = pagination,
+    filtersParams = filters, 
+    sorterParams = sortInfo
+  ) => {
+    try {
+      setLoading(true);
+      console.log('获取分页数据，参数:', {
+        page: paginationParams.current,
+        pageSize: paginationParams.pageSize,
+        filters: filtersParams,
+        sortField: sorterParams.field,
+        sortOrder: sorterParams.order
+      });
+
+      const response = await infiniAccountApi.getPaginatedInfiniAccounts(
+        paginationParams.current,
+        paginationParams.pageSize,
+        filtersParams,
+        sorterParams.field,
+        sorterParams.order
+      );
+
+      if (response.success) {
+        setAccounts(response.data.accounts);
+        setPagination({
+          ...paginationParams,
+          total: response.data.pagination.total
+        });
+      } else {
+        message.error(response.message || '获取账户列表失败');
+      }
+    } catch (error: any) {
+      message.error(error.message || '获取账户列表失败');
+      console.error('获取分页账户列表失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 驼峰式字段名到下划线分隔字段名的映射
+  const fieldNameMapping: Record<string, string> = {
+    'availableBalance': 'available_balance',
+    'redPacketBalance': 'red_packet_balance',
+    'totalConsumptionAmount': 'total_consumption_amount',
+    'totalEarnBalance': 'total_earn_balance',
+    'dailyConsumption': 'daily_consumption',
+    'lastSyncAt': 'last_sync_at',
+    'verificationLevel': 'verification_level',
+    'userId': 'user_id',
+    'cookieExpiresAt': 'cookie_expires_at',
+    'infiniCreatedAt': 'infini_created_at',
+    'googlePasswordIsSet': 'google_password_is_set',
+    'google2faIsBound': 'google_2fa_is_bound',
+    'mockUserId': 'mock_user_id',
+    'invitationCode': 'invitation_code'
+  };
+  
+  // 特殊字段映射，这些字段不需要表名前缀
+  const directFieldMapping: Record<string, string> = {
+    'cardCount': 'cardCount', // 直接使用别名排序
+  };
+  
+  // 将驼峰字段名转换为下划线分隔字段名
+  const convertFieldName = (field?: string): string | undefined => {
+    if (!field) return undefined;
+    
+    // 检查是否是特殊字段（不需要表名前缀的字段）
+    if (directFieldMapping[field]) {
+      return directFieldMapping[field];
+    }
+    
+    // 常规字段映射
+    return fieldNameMapping[field] || field;
+  };
+
+  // 表格变化处理 - 处理分页、筛选和排序
+  const handleTableChange = (newPagination: any, newFilters: any, sorter: any) => {
+    console.log('表格变化:', { newPagination, newFilters, sorter });
+    
+    // 处理筛选条件
+    const formattedFilters: Record<string, any> = {};
+    Object.entries(newFilters).forEach(([key, values]: [string, any]) => {
+      if (values && values.length > 0) {
+        // 处理卡片数量的特殊筛选格式
+        if (key === 'cardCount' && values[0]) {
+          formattedFilters.cardCount = values[0];
+        } else {
+          formattedFilters[key] = values[0];
+        }
+      }
+    });
+    
+    // 处理排序
+    const newSortInfo = {
+      field: undefined as string | undefined,
+      order: undefined as 'asc' | 'desc' | undefined
+    };
+    
+    if (sorter && sorter.field) {
+      // 将驼峰字段名转换为下划线分隔的字段名供后端使用
+      newSortInfo.field = convertFieldName(sorter.field);
+      newSortInfo.order = sorter.order === 'ascend' ? 'asc' : 
+                          sorter.order === 'descend' ? 'desc' : 
+                          undefined;
+      
+      console.log(`字段名映射: ${sorter.field} -> ${newSortInfo.field}`);
+    }
+    
+    // 更新状态
+    setFilters(formattedFilters);
+    setSortInfo(newSortInfo);
+    setPagination({
+      ...pagination,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize
+    });
+    
+    // 获取新数据
+    fetchPaginatedAccounts(
+      {
+        current: newPagination.current,
+        pageSize: newPagination.pageSize,
+        total: pagination.total
+      },
+      formattedFilters,
+      newSortInfo
+    );
+  };
+
+  // 首次加载时使用分页API
+  useEffect(() => {
+    fetchPaginatedAccounts();
+    fetchGroups();
+  }, []);
+
   return (
     <div>
       <StyledCard
@@ -3256,7 +3495,7 @@ const AccountMonitor: React.FC = () => {
               type="default"
               icon={<SyncOutlined spin={loading || loadingGroups} />}
               onClick={() => {
-                fetchAccounts();
+                fetchPaginatedAccounts();
                 fetchGroups();
               }}
               loading={loading || loadingGroups}
@@ -3271,6 +3510,9 @@ const AccountMonitor: React.FC = () => {
                   </Menu.Item>
                   <Menu.Item key="syncAllKyc" onClick={batchSyncAllKyc}>
                     批量同步KYC信息
+                  </Menu.Item>
+                  <Menu.Item key="syncAllCards" onClick={batchSyncAllCards}>
+                    批量同步卡片信息
                   </Menu.Item>
                   <Menu.Item key="redPacket" onClick={openRedPacketModal}>
                     批量领取红包
@@ -3352,19 +3594,22 @@ const AccountMonitor: React.FC = () => {
             dataSource={searchText ? filteredAccounts : accounts}
             rowKey="id"
             loading={loading || loadingGroups}
-            pagination={{ pageSize: 10 }}
+            pagination={{
+              ...pagination,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条数据`
+            }}
             scroll={{ x: 1400 }}
-  onChange={(pagination, filters, sorter) => {
-    console.log('Table changed:', { pagination, filters, sorter });
-  }}
-  components={{
-    header: {
-      cell: ResizableTitle,
-    },
-    body: {
-      row: (props) => <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800" />,
-    }
-  }}
+            onChange={handleTableChange}
+            components={{
+              header: {
+                cell: ResizableTitle,
+              },
+              body: {
+                row: (props) => <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800" />,
+              }
+            }}
           />
         </TableContainer>
       </StyledCard>

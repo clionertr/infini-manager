@@ -609,6 +609,41 @@ export const infiniAccountApi = {
       return response.data;
     } catch (error) {
       console.error('获取账户收支明细失败:', error);
+  
+  // 获取分页的Infini账户列表（支持筛选和排序，包含卡片数量）
+  getPaginatedInfiniAccounts: async (
+    page: number = 1,
+    pageSize: number = 10,
+    filters: Record<string, any> = {},
+    sortField?: string,
+    sortOrder?: 'asc' | 'desc',
+    groupId?: string
+  ) => {
+    try {
+      console.log(`获取分页Infini账户，页码: ${page}, 每页记录数: ${pageSize}`);
+      
+      const params: Record<string, any> = { page, pageSize };
+      
+      // 添加过滤器参数
+      if (Object.keys(filters).length > 0) {
+        params.filters = JSON.stringify(filters);
+      }
+      
+      // 添加排序参数
+      if (sortField) {
+        params.sortField = sortField;
+        params.sortOrder = sortOrder || 'asc';
+      }
+      
+      // 添加分组ID参数
+      if (groupId) {
+        params.groupId = groupId;
+      }
+      
+      const response = await api.get(`${apiBaseUrl}/api/infini-accounts/paginated`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('获取分页Infini账户列表失败:', error);
       throw error;
     }
   }
@@ -1266,6 +1301,152 @@ export default api;
 
 // 导出API基础URL，以便在各组件中使用
 export { apiBaseUrl };
+
+/**
+ * 卡片管理API
+ * 处理与卡片相关的API请求
+ */
+export const infiniCardApi = {
+  // 获取卡片价格
+  getCardPrice: async (accountId: string, cardType: string | number = 3) => {
+    try {
+      console.log(`获取卡片价格，账户ID: ${accountId}, 卡片类型: ${cardType}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-cards/price/${cardType}`, {
+        params: { accountId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取卡片价格失败:', error);
+      throw error;
+    }
+  },
+  
+  // 获取可用卡类型
+  getAvailableCardTypes: async (accountId: string) => {
+    try {
+      console.log(`获取可用卡类型，账户ID: ${accountId}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-cards/available-types`, {
+        params: { accountId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取可用卡类型失败:', error);
+      throw error;
+    }
+  },
+  
+  // 申请新卡
+  applyNewCard: async (accountId: string, cardType: number = 3, price?: number, discount?: number) => {
+    try {
+      console.log(`申请新卡，账户ID: ${accountId}, 卡片类型: ${cardType}`);
+      const response = await api.post(`${apiBaseUrl}/api/infini-cards/apply`, {
+        accountId,
+        cardType,
+        price,
+        discount
+      });
+      return response.data;
+    } catch (error) {
+      console.error('申请新卡失败:', error);
+      throw error;
+    }
+  },
+  
+  // 获取卡片列表
+  getCardList: async (accountId: string) => {
+    try {
+      console.log(`获取卡片列表，账户ID: ${accountId}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-cards/list`, {
+        params: { accountId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取卡片列表失败:', error);
+      throw error;
+    }
+  },
+  
+  // 同步卡片信息
+  syncCardInfo: async (accountId: string) => {
+    try {
+      console.log(`同步卡片信息，账户ID: ${accountId}`);
+      const response = await api.post(`${apiBaseUrl}/api/infini-cards/sync`, {
+        accountId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('同步卡片信息失败:', error);
+      throw error;
+    }
+  },
+  
+  // 获取卡片详情
+  getCardDetail: async (accountId: string, cardId: string) => {
+    try {
+      console.log(`获取卡片详情，账户ID: ${accountId}, 卡片ID: ${cardId}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-cards/detail`, {
+        params: {
+          accountId,
+          cardId
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取卡片详情失败:', error);
+      throw error;
+    }
+  },
+  
+  // 获取开卡申请记录
+  getCardApplications: async (accountId: string) => {
+    try {
+      console.log(`获取开卡申请记录，账户ID: ${accountId}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-cards/applications`, {
+        params: { accountId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取开卡申请记录失败:', error);
+      throw error;
+    }
+  },
+  
+  // 提交KYC基础信息
+  submitKycBasic: async (accountId: string, kycData: {
+    first_name: string;
+    last_name: string;
+    phone_code: string;
+    phone_number: string;
+    birthday: string;
+  }) => {
+    try {
+      console.log(`提交KYC基础信息，账户ID: ${accountId}`);
+      const response = await api.post(`${apiBaseUrl}/api/infini-cards/kyc/basic`, {
+        accountId,
+        kycData
+      });
+      return response.data;
+    } catch (error) {
+      console.error('提交KYC基础信息失败:', error);
+      throw error;
+    }
+  },
+  
+  // 提交KYC生日信息
+  submitKycBirthday: async (accountId: string, birthday: string) => {
+    try {
+      console.log(`提交KYC生日信息，账户ID: ${accountId}，生日: ${birthday}`);
+      const response = await api.post(`${apiBaseUrl}/api/infini-cards/kyc/birthday`, {
+        accountId,
+        birthday
+      });
+      return response.data;
+    } catch (error) {
+      console.error('提交KYC生日信息失败:', error);
+      throw error;
+    }
+  }
+};
 
 /**
  * 使用说明：
