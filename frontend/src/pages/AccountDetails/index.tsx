@@ -5,6 +5,7 @@ import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import TransferHistoryDetail from '../../components/TransferHistoryDetail';
 import styled from 'styled-components';
 import { infiniAccountApi, transferApi } from '../../services/api';
+import AccountStatementModal from '../../components/AccountStatementModal'; // 导入收支明细 Modal
 import type { TablePaginationConfig } from 'antd/es/table';
 import type { FilterValue, SorterResult } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
@@ -51,6 +52,19 @@ interface TransferRecord {
   original_contact_type?: string;
 }
 
+interface StatementItem {
+  id: number;
+  tx_id: string;
+  field: string;
+  change_type: number;
+  change: number;
+  status: number;
+  pre_balance: number;
+  balance: number;
+  created_at: number;
+  metadata: Record<string, any>;
+}
+
 interface TableParams {
   pagination: TablePaginationConfig;
   sortField?: string;
@@ -79,6 +93,16 @@ const AccountDetails: React.FC = () => {
       pageSizeOptions: ['10', '20', '50', '100'],
     },
   });
+
+  // 收支明细 Modal 相关状态
+  const [statementModalVisible, setStatementModalVisible] = useState(false);
+  const [statementLoading, setStatementLoading] = useState(false);
+  const [statementItems, setStatementItems] = useState<StatementItem[]>([]);
+  const [statementTotal, setStatementTotal] = useState(0);
+  const [statementCurrentPage, setStatementCurrentPage] = useState(1);
+  const [statementPageSize, setStatementPageSize] = useState(20);
+  const [selectedAccountIdForStatement, setSelectedAccountIdForStatement] = useState<string | null>(null);
+
 
   // 获取账户列表
   const fetchAccounts = async () => {
@@ -259,6 +283,73 @@ const AccountDetails: React.FC = () => {
     });
     fetchData({});
   };
+
+  // 获取账户收支明细
+  const fetchAccountStatement = async (accountId: string, page: number = 1, pageSize: number = 20, startTime?: number, endTime?: number) => {
+    if (!accountId) {
+      message.error('请先选择一个账户');
+      return;
+    }
+    setStatementLoading(true);
+    setSelectedAccountIdForStatement(accountId); // 保存当前查询的账户ID
+    try {
+      const response = await infiniAccountApi.getAccountStatement(accountId, page, pageSize, startTime, endTime);
+      if (response.success && response.data) {
+        setStatementItems(response.data.items || []);
+        setStatementTotal(response.data.total || 0);
+        setStatementCurrentPage(page);
+        setStatementPageSize(pageSize);
+        setStatementModalVisible(true);
+      } else {
+        message.error(response.message || '获取收支明细失败');
+        setStatementItems([]);
+        setStatementTotal(0);
+      }
+    } catch (error) {
+      console.error('获取账户收支明细失败:', error);
+      message.error('获取账户收支明细失败');
+      setStatementItems([]);
+      setStatementTotal(0);
+    } finally {
+      setStatementLoading(false);
+    }
+  };
+
+  // 处理收支明细 Modal 分页
+  const handleStatementPageChange = (page: number, pageSize?: number) => {
+    if (selectedAccountIdForStatement) {
+      // 如果pageSize变化，也需要传递
+      const newPageSize = pageSize || statementPageSize;
+      fetchAccountStatement(selectedAccountIdForStatement, page, newPageSize);
+    }
+  };
+
+  // 打开收支明细 Modal
+  const handleOpenStatementModal = () => {
+    // 尝试从筛选条件中获取账户ID
+    const selectedAccount = form.getFieldValue('keyword'); // keyword 字段用于账户ID或邮箱
+
+    if (selectedAccount && String(selectedAccount).trim() !== '') {
+        const trimmedAccount = String(selectedAccount).trim();
+        // 查找账户ID，因为 selectedAccount 可能是邮箱
+        const account = accounts.find(acc => acc.email === trimmedAccount || acc.id === trimmedAccount);
+        if (account) {
+            fetchAccountStatement(account.id, 1, statementPageSize);
+        } else {
+            // 如果是直接输入的ID，并且不在列表中，也尝试使用
+            // 简单校验是否像ID (例如，只包含数字或特定格式，或者符合 typical email 格式)
+            // 注意：这里的ID校验可能需要根据实际ID格式调整
+            if (/^\d+$/.test(trimmedAccount) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i.test(trimmedAccount) || /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/.test(trimmedAccount)) {
+                 fetchAccountStatement(trimmedAccount, 1, statementPageSize);
+            } else {
+                 message.warning('输入的账户标识格式不正确，请输入有效的账户ID或邮箱。');
+            }
+        }
+    } else {
+      message.warning('请输入账户ID或邮箱以查看其收支明细。');
+    }
+  };
+
 
   // 获取状态标签颜色
   const getStatusColor = (status: string) => {
@@ -562,6 +653,12 @@ const AccountDetails: React.FC = () => {
               >
                 搜索
               </Button>
+              <Button
+                onClick={handleOpenStatementModal}
+                loading={statementLoading}
+              >
+                查看收支明细
+              </Button>
               {/* 隐藏导出按钮
               <Button 
                 type="primary" 
@@ -736,6 +833,18 @@ const AccountDetails: React.FC = () => {
           </Row>
         )}
       </Modal>
+
+      {/* 账户收支明细 Modal */}
+      <AccountStatementModal
+        visible={statementModalVisible}
+        loading={statementLoading}
+        items={statementItems}
+        total={statementTotal}
+        onCancel={() => setStatementModalVisible(false)}
+        onPageChange={handleStatementPageChange}
+        currentPage={statementCurrentPage}
+        pageSize={statementPageSize}
+      />
     </PageContainer>
   );
 };

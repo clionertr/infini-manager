@@ -4411,4 +4411,98 @@ export class InfiniAccountService {
       };
     }
   }
+/**
+   * 获取账户收支明细
+   * @param accountId Infini账户ID
+   * @param params 查询参数，包含page, size, start_time, end_time
+   * @param jwtToken JWT Token
+   */
+  async fetchAccountStatement(
+    accountId: string,
+    params: {
+      page?: number;
+      size?: number;
+      start_time?: number;
+      end_time?: number;
+    },
+    jwtToken: string
+  ): Promise<ApiResponse> {
+    try {
+      console.log(`开始获取账户 ${accountId} 的收支明细，参数: ${JSON.stringify(params)}`);
+
+      // 查找账户以确认存在性，但此处我们直接使用传入的jwtToken，不通过getCookieForAccount获取
+      const account = await db('infini_accounts')
+        .where('id', accountId)
+        .first();
+
+      if (!account) {
+        console.error(`获取账户收支明细失败: 找不到ID为${accountId}的Infini账户`);
+        return {
+          success: false,
+          message: '找不到指定的Infini账户'
+        };
+      }
+
+      // 构造请求体
+      const requestBody: any = {};
+      if (params.page !== undefined) requestBody.page = params.page;
+      if (params.size !== undefined) requestBody.size = params.size;
+      if (params.start_time !== undefined) requestBody.start_time = params.start_time;
+      if (params.end_time !== undefined) requestBody.end_time = params.end_time;
+
+      console.log(`调用Infini API获取账户收支明细，请求体: ${JSON.stringify(requestBody)}`);
+
+      const response = await httpClient.post(
+        `${INFINI_API_BASE_URL}/user/statement/record`,
+        requestBody,
+        {
+          headers: {
+            'Cookie': `jwt_token=${jwtToken}`, // 直接使用传入的jwtToken
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+            'Referer': 'https://app.infini.money/',
+            'Origin': 'https://app.infini.money',
+          }
+        }
+      );
+
+      console.log('Infini 账户收支明细API响应:', response.data);
+
+      if (response.data.code === 0) {
+        console.log(`成功获取账户 ${accountId} 的收支明细`);
+        return {
+          success: true,
+          data: response.data.data,
+          message: '成功获取账户收支明细'
+        };
+      } else if (response.data.code === 401) {
+        console.error(`获取账户收支明细失败: 未授权 - ${response.data.message}`);
+        return {
+          success: false,
+          message: `获取账户收支明细失败: 未授权 - ${response.data.message || '请检查JWT Token'}`
+        };
+      }
+      else {
+        console.error(`Infini API返回错误: ${response.data.message || '未知错误'}`);
+        return {
+          success: false,
+          message: `获取账户收支明细失败: ${response.data.message || '未知错误'}`
+        };
+      }
+    } catch (error: any) {
+      console.error('获取账户收支明细失败:', error);
+      // 检查是否是axios的错误，并尝试提取响应状态码
+      if (error.isAxiosError && error.response && error.response.status === 401) {
+        return {
+          success: false,
+          message: `获取账户收支明细失败: 未授权 - ${error.response.data?.message || '请检查JWT Token'}`
+        };
+      }
+      return {
+        success: false,
+        message: `获取账户收支明细失败: ${(error as Error).message}`
+      };
+    }
+  }
 }

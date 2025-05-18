@@ -39,7 +39,8 @@ import {
   addAccountToGroup,
   addAccountsToGroup,
   removeAccountFromGroup,
-  removeAccountsFromGroup
+  removeAccountsFromGroup,
+  getAccountStatement // 新增导入
 } from '../controllers/infiniAccountController';
 const router = express.Router();
 /**
@@ -1602,5 +1603,56 @@ router.post('/groups/accounts/remove', removeAccountsFromGroup);
  *         description: 服务器错误
  */
 router.post('/one-click-setup', oneClickAccountSetup);
+
+/**
+ * @swagger
+ * /api/infini-accounts/{accountId}/statement:
+ *   get:
+ *     summary: 获取账户收支明细
+ *     tags: [InfiniAccounts]
+ *     parameters:
+ *       - in: path
+ *         name: accountId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Infini账户ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: 页码
+ *       - in: query
+ *         name: size
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: 每页数量
+ *       - in: query
+ *         name: start_time
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: 开始时间 (时间戳)
+ *       - in: query
+ *         name: end_time
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: 结束时间 (时间戳)
+ *     responses:
+ *       200:
+ *         description: 成功获取账户收支明细
+ *       400:
+ *         description: 请求参数错误
+ *       401:
+ *         description: 未授权，请检查JWT Token
+ *       404:
+ *         description: 账户不存在
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/:accountId/statement', getAccountStatement);
 
 export default router;

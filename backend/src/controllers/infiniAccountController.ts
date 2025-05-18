@@ -1714,3 +1714,72 @@ export const removeAccountsFromGroup = async (req: Request, res: Response): Prom
     });
   }
 };
+/**
+ * 获取账户收支明细
+ */
+export const getAccountStatement = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { accountId } = req.params;
+    const { page, size, start_time, end_time } = req.query;
+
+    if (!accountId) {
+      res.status(400).json({
+        success: false,
+        message: '账户ID是必填项'
+      });
+      return;
+    }
+
+    console.log(`接收到获取账户收支明细请求，账户ID: ${accountId}, 分页: ${page}, 大小: ${size}, 开始时间: ${start_time}, 结束时间: ${end_time}`);
+
+    // 调用服务层获取账户的有效Cookie
+    const cookieResult = await infiniAccountService.getAccountCookie(accountId, '获取账户收支明细失败，');
+    if (!cookieResult.cookie) {
+      res.status(401).json({
+        success: false,
+        message: cookieResult.account ? '无法获取账户的有效登录凭证' : '找不到指定的Infini账户或无法获取登录凭证'
+      });
+      return;
+    }
+
+    // 从Cookie字符串中提取jwt_token的值
+    // Cookie格式通常是 "jwt_token=xxxxxx; Expires=...; Path=..."
+    const jwtTokenMatch = cookieResult.cookie.match(/jwt_token=([^;]+)/);
+    if (!jwtTokenMatch || !jwtTokenMatch[1]) {
+      res.status(500).json({
+        success: false,
+        message: '无法从Cookie中提取JWT Token'
+      });
+      return;
+    }
+    const jwtToken = jwtTokenMatch[1];
+
+    const response = await infiniAccountService.fetchAccountStatement(
+      accountId,
+      {
+        page: page ? parseInt(page as string, 10) : undefined,
+        size: size ? parseInt(size as string, 10) : undefined,
+        start_time: start_time ? parseInt(start_time as string, 10) : undefined,
+        end_time: end_time ? parseInt(end_time as string, 10) : undefined,
+      },
+      jwtToken // 使用从服务层获取并解析的jwtToken
+    );
+
+    if (response.success) {
+      res.json(response);
+    } else if (response.message && response.message.includes('找不到指定的Infini账户')) {
+      res.status(404).json(response);
+    } else if (response.message && response.message.includes('未授权')) {
+      res.status(401).json(response);
+    }
+    else {
+      res.status(500).json(response);
+    }
+  } catch (error) {
+    console.error('获取账户收支明细失败:', error);
+    res.status(500).json({
+      success: false,
+      message: `获取账户收支明细失败: ${(error as Error).message}`
+    });
+  }
+};

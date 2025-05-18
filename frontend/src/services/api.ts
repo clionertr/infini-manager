@@ -586,6 +586,31 @@ export const infiniAccountApi = {
       console.error('获取所有Infini账户失败:', error);
       throw error;
     }
+  },
+
+  // 获取账户收支明细
+  getAccountStatement: async (
+    accountId: string,
+    page: number = 1,
+    size: number = 20,
+    start_time?: number,
+    end_time?: number
+  ) => {
+    try {
+      console.log(`获取账户收支明细，账户ID: ${accountId}, 页码: ${page}, 每页数量: ${size}, 开始时间: ${start_time}, 结束时间: ${end_time}`);
+      const response = await api.get(`${apiBaseUrl}/api/infini-accounts/${accountId}/statement`, {
+        params: {
+          page,
+          size,
+          start_time,
+          end_time
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取账户收支明细失败:', error);
+      throw error;
+    }
   }
 };
 
