@@ -1,5 +1,5 @@
 # Infini 账号管理系统
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/clionertr/infini-manager)
 ## 免责声明 | DISCLAIMER
 
 **⚠️ 重要声明：本项目仅供学习和研究使用 ⚠️**  
