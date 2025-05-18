@@ -4467,7 +4467,7 @@ export class InfiniAccountService {
         }
       );
 
-      console.log('Infini 账户收支明细API响应:', response.data);
+      // console.log('Infini 账户收支明细API响应:', response.data);
 
       if (response.data.code === 0) {
         console.log(`成功获取账户 ${accountId} 的收支明细`);
