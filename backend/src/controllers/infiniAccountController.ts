@@ -1780,6 +1780,9 @@ export const getAccountStatement = async (req: Request, res: Response): Promise<
     res.status(500).json({
       success: false,
       message: `获取账户收支明细失败: ${(error as Error).message}`
+    });
+} // Closes catch block for getAccountStatement
+}; // Closes getAccountStatement function itself
 
 /**
  * 获取分页的Infini账户列表
@@ -1833,4 +1836,4 @@ export const getPaginatedInfiniAccounts = async (req: Request, res: Response): P
       message: `获取分页Infini账户列表失败: ${(error as Error).message}`
     });
   }
-};
+}

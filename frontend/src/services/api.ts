@@ -609,6 +609,9 @@ export const infiniAccountApi = {
       return response.data;
     } catch (error) {
       console.error('获取账户收支明细失败:', error);
+      throw error;
+    }
+  },
   
   // 获取分页的Infini账户列表（支持筛选和排序，包含卡片数量）
   getPaginatedInfiniAccounts: async (
