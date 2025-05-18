@@ -82,7 +82,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: `http://localhost:${process.env.PORT || '33201'}`,
         description: '开发服务器',
       },
     ],

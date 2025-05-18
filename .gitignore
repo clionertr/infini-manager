@@ -42,4 +42,4 @@ data/*
 temp/
 
 deepwiki/*
-memory-bank/activeContext.md
+memory-bank/*
