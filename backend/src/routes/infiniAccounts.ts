@@ -3,6 +3,7 @@
  * 处理与Infini账户相关的API请求
  */
 import express from 'express';
+import { createBusinessContextMiddleware } from '../utils/BusinessContextExample';
 import {
   uploadKycImage,
   uploadKycImageMiddleware,
@@ -45,6 +46,9 @@ import {
   getAccountStatement // 新增导入
 } from '../controllers/infiniAccountController';
 const router = express.Router();
+
+// 为所有账户相关路由设置业务上下文
+router.use(createBusinessContextMiddleware('account', 'general'));
 /**
  * @swagger
  * /api/infini-accounts/2fa/qrcode:
@@ -59,7 +63,10 @@ const router = express.Router();
  *       500:
  *         description: 服务器错误
  */
-router.get('/2fa/qrcode', getGoogle2faQrcode);
+router.get('/2fa/qrcode', 
+  createBusinessContextMiddleware('account', '2fa_qrcode'),
+  getGoogle2faQrcode
+);
 /**
  * @swagger
  * /api/infini-accounts/2fa/verify-email:
@@ -591,7 +598,12 @@ router.get('/paginated', getPaginatedInfiniAccounts);
  *       500:
  *         description: 服务器错误
  */
-router.post('/login', loginInfiniAccount);
+router.post('/login', 
+  createBusinessContextMiddleware('account', 'login', (req) => ({
+    email: req.body.email
+  })),
+  loginInfiniAccount
+);
 
 /**
  * @swagger
@@ -623,7 +635,12 @@ router.post('/login', loginInfiniAccount);
  *       500:
  *         description: 服务器错误
  */
-router.post('/', createInfiniAccount);
+router.post('/', 
+  createBusinessContextMiddleware('account', 'create', (req) => ({
+    email: req.body.email
+  })), 
+  createInfiniAccount
+);
 
 /**
  * @swagger

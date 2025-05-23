@@ -15,6 +15,10 @@ import AccountGroupManage from '../pages/AccountGroupManage';
 import AffCashback from '../pages/AffCashback';
 import AffHistory from '../pages/AffHistory';
 import BatchCardApply from '../pages/BatchCardApply';
+import BatchTransfer from '../pages/BatchTransfer';
+import BatchTransferDetails from '../pages/BatchTransferDetails';
+import TaskManage from '../pages/TaskManage';
+import ApiLogMonitor from '../pages/ApiLogMonitor';
 
 /**
  * 应用路由配置
@@ -43,6 +47,13 @@ const AppRoutes: React.FC = () => {
         <Route path="/aff-history" element={<AffHistory />} />
         {/* 卡片管理相关路由 */}
         <Route path="/batch-card-apply" element={<BatchCardApply />} />
+        {/* 批量转账相关路由 */}
+        <Route path="/batch-transfer" element={<BatchTransfer />} />
+        <Route path="/batch-transfer-details" element={<BatchTransferDetails />} />
+        {/* 定时任务管理路由 */}
+        <Route path="/task-manage" element={<TaskManage />} />
+        {/* API日志监控路由 */}
+        <Route path="/api-log-monitor" element={<ApiLogMonitor />} />
       </Route>
     </Routes>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Button } from 'antd';
+import { Layout, Menu, Button, Space } from 'antd';
 import styled from 'styled-components';
 import {
   DashboardOutlined,
@@ -16,6 +16,8 @@ import {
   TeamOutlined,
   DollarOutlined,
   CreditCardOutlined,
+  ScheduleOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -87,12 +89,35 @@ const StyledMenu = styled(Menu)`
   }
 `;
 
+// Beta标志
+const BetaBadge = styled.span`
+  background-color: #ff4d4f;
+  color: white;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: bold;
+`;
+
+// 开发中标志
+const DevBadge = styled.span`
+  background-color: #722ed1;
+  color: white;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: bold;
+`;
+
 const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggleCollapsed }) => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // 菜单项配置
+  // 菜单项配置 - 重新组织为业务功能、资金操作、系统管理和工具等逻辑分组
   const menuItems = [
+    // ------------ 概览和监控 ------------
     {
       key: '/overview',
       icon: <DashboardOutlined />,
@@ -103,6 +128,33 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggleCollapsed }) => {
       icon: <MonitorOutlined />,
       label: '账户监控',
     },
+    
+    // ------------ 账户管理 ------------
+    {
+      key: '/account-register',
+      icon: <UserAddOutlined />,
+      label: '账户批量注册机',
+    },
+    {
+      key: '/account-group-manage',
+      icon: <TeamOutlined />,
+      label: '账户分组管理',
+    },
+    
+    // ------------ 卡片管理 ------------
+    {
+      key: 'card-ops',
+      icon: <CreditCardOutlined />,
+      label: '卡片管理',
+      children: [
+        {
+          key: '/batch-card-apply',
+          label: '批量开卡',
+        }
+      ]
+    },
+    
+    // ------------ 资金操作 ------------
     {
       key: 'account-ops',
       icon: <SwapOutlined />,
@@ -113,20 +165,23 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggleCollapsed }) => {
           label: '账户转账',
         },
         {
+          key: '/batch-transfer',
+          label: (
+            <Space>
+              批量转账
+              <BetaBadge>Beta</BetaBadge>
+            </Space>
+          ),
+        },
+        {
+          key: '/batch-transfer-details',
+          label: '批量转账明细',
+        },
+        {
           key: '/account-details',
           label: '账户明细',
         }
       ]
-    },
-    {
-      key: '/account-register',
-      icon: <UserAddOutlined />,
-      label: '账户批量注册机',
-    },
-    {
-      key: '/account-group-manage',
-      icon: <TeamOutlined />,
-      label: '账户分组管理',
     },
     {
       key: 'aff-ops',
@@ -143,16 +198,50 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggleCollapsed }) => {
         }
       ]
     },
+    
+    // ------------ 系统管理 ------------
     {
-      key: '/notification-manage',
-      icon: <BellOutlined />,
-      label: '通知管理',
+      key: '/task-manage',
+      icon: <ScheduleOutlined />,
+      label: (
+        <Space>
+          定时任务管理
+          <DevBadge>开发中</DevBadge>
+        </Space>
+      ),
     },
     {
       key: '/trigger-manage',
       icon: <ThunderboltOutlined />,
-      label: '触发器管理',
+      label: (
+        <Space>
+          触发器管理
+          <DevBadge>开发中</DevBadge>
+        </Space>
+      ),
     },
+    {
+      key: '/notification-manage',
+      icon: <BellOutlined />,
+      label: (
+        <Space>
+          通知管理
+          <DevBadge>开发中</DevBadge>
+        </Space>
+      ),
+    },
+    {
+      key: '/api-log-monitor',
+      icon: <ApiOutlined />,
+      label: (
+        <Space>
+          API日志监控
+          <DevBadge>开发中</DevBadge>
+        </Space>
+      ),
+    },
+    
+    // ------------ 辅助工具 ------------
     {
       key: '/email-manage',
       icon: <MailOutlined />,
@@ -162,17 +251,6 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggleCollapsed }) => {
       key: '/kyc-image-manage',
       icon: <FileImageOutlined />,
       label: 'KYC图片管理',
-    },
-    {
-      key: 'card-ops',
-      icon: <CreditCardOutlined />,
-      label: '卡片管理',
-      children: [
-        {
-          key: '/batch-card-apply',
-          label: '批量开卡',
-        }
-      ]
     },
     {
       key: '/random-user-manage',

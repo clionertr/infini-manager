@@ -32,6 +32,7 @@ import {
   Empty,
   TableColumnsType,
   Tabs, // 添加Tabs组件导入
+  Popover, // 添加Popover组件导入
 } from 'antd';
 import {
   PlusOutlined,
@@ -67,8 +68,9 @@ import { Resizable } from 'react-resizable';
 import 'react-resizable/css/styles.css';
 import { debounce, DebouncedFunc } from 'lodash';
 import { ResizeCallbackData } from 'react-resizable';
-import api, { apiBaseUrl, configApi, infiniAccountApi, randomUserApi, totpToolApi, httpService, transferApi } from '../../services/api';
+import api, { apiBaseUrl, configApi, infiniAccountApi, randomUserApi, totpToolApi, httpService, transferApi, batchTransferApi } from '../../services/api';
 import RandomUserRegisterModal from '../../components/RandomUserRegisterModal';
+import KycInfoPopover from '../../components/KycInfoPopover';
 import TwoFactorAuthModal from '../../components/TwoFactorAuthModal';
 import TwoFaViewModal from '../../components/TwoFaViewModal';
 import KycAuthModal from '../../components/KycAuthModal';
@@ -80,6 +82,8 @@ import OneClickSetupModal from '../../components/OneClickSetupModal';
 import BatchRegisterModal from '../../components/BatchRegisterModal';
 import styled from 'styled-components';
 import dayjs from 'dayjs';
+import { infiniCardApi } from '../../services/api';
+import TransferActionPopover from '../../components/TransferActionPopover';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -635,7 +639,7 @@ const AccountDetailModal: React.FC<{
     console.log('当前账户信息:', account);
     console.log('verification_level:', account.verification_level);
 
-    return (
+  return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
@@ -651,13 +655,13 @@ const AccountDetailModal: React.FC<{
                   account.verification_level === 1 ? 'blue' : 'orange'
                 }>
                   {account.verification_level === 2 ? 'KYC认证' : 
-                   account.verification_level === 3 ? 'KYC认证中' :
-                   account.verification_level === 1 ? '基础认证' : '未认证'}
+                  account.verification_level === 3 ? 'KYC认证中' :
+                  account.verification_level === 1 ? '基础认证' : '未认证'}
                 </StatusTag>
               )}
             </Title>
           </div>
-        <div>
+          <div>
           {account.mockUserId && (
             <Button 
               type="primary"
@@ -1070,7 +1074,10 @@ const AccountDetailModal: React.FC<{
       {selectedCard && account && account.id && (
         <CardDetailModal
           visible={cardDetailModalVisible}
-          onClose={() => setCardDetailModalVisible(false)}
+          onClose={() => {
+            setCardDetailModalVisible(false);
+            setSelectedCard(null);
+          }}
           cardId={selectedCard.card_id}
           cardInfo={selectedCard}
           accountId={account.id}
@@ -2724,28 +2731,12 @@ const AccountMonitor: React.FC = () => {
         return levelA - levelB;
       },
       render: (level: number | undefined, record: InfiniAccount) => {
-        // 根据verification_level或verificationLevel显示不同颜色的Tag
         // 优先使用verification_level，如果为undefined则使用verificationLevel
         const actualLevel = level !== undefined ? level : record.verificationLevel;
         
-        let color = 'orange';
-        let text = '未认证';
-        
-        if (actualLevel === 1) {
-          color = 'blue';
-          text = '基础认证';
-        } else if (actualLevel === 2) {
-          color = 'green';
-          text = 'KYC认证';
-        } else if (actualLevel === 3) {
-          color = 'gold';
-          text = 'KYC认证中';
-        }
-        
+        // 使用KycInfoPopover组件显示KYC状态和信息
         return (
-          <Tooltip title={`KYC验证级别: ${actualLevel !== undefined ? actualLevel : '未设置'}`}>
-            <Tag color={color}>{text}</Tag>
-          </Tooltip>
+          <KycInfoPopover accountId={record.id} verificationLevel={actualLevel} />
         );
       }
     },
@@ -2753,19 +2744,11 @@ const AccountMonitor: React.FC = () => {
       title: '可用余额',
       dataIndex: 'availableBalance',
       key: 'availableBalance',
-      width: 140,
+      width: 160,
       sorter: (a: InfiniAccount, b: InfiniAccount) => a.availableBalance - b.availableBalance,
-      render: (amount: number) => {
-        const { color, style } = getStyleForBalance(amount, availableBalanceColorRanges);
-        return (
-          <BalanceTag 
-            color={color}
-            style={style}
-          >
-            {amount.toFixed(6)}
-          </BalanceTag>
-        );
-      },
+      render: (_: number, record: InfiniAccount) => (
+        <TransferActionPopover account={{ id: record.id, email: record.email, availableBalance: record.availableBalance }} />
+      )
     },
     {
       title: '红包余额',
@@ -2826,10 +2809,61 @@ const AccountMonitor: React.FC = () => {
         { text: '4-10张', value: '>3,<=10' },
         { text: '10张以上', value: '>10' }
       ],
-      render: (text: number) => (
-        <Tag color={text > 0 ? 'blue' : 'default'}>
-          {text || 0}
-        </Tag>
+      render: (text: number, record: InfiniAccount) => (
+        <Popover
+          title={`${record.email} 的卡片列表`}
+          placement="rightBottom"
+          visible={activePopoverId===record.id}
+          onVisibleChange={(v)=>{if(!v){setActivePopoverId(null);}}}
+          content={
+            <div style={{ width: 500 }}>
+              {cardListLoading ? (
+                <div style={{textAlign:'center',padding:24}}><Spin /></div>
+              ) : (
+                text > 0 ? (
+                  <div>
+                    <Table
+                      dataSource={cardList}
+                      rowKey={(r:any)=>r.card_id||r.id}
+                      pagination={false}
+                      onRow={(record:any)=>({
+                        onClick: ()=> showCardDetail(record),
+                        style: { cursor: 'pointer' }
+                      })}
+                      columns={[
+                        { title:'卡片ID', dataIndex:'card_id', key:'card_id'},
+                        { title:'卡号后四位', dataIndex:'card_last_four_digits', key:'last4'},
+                        { title:'状态', dataIndex:'status', key:'status'},
+                        { title:'余额', dataIndex:'available_balance', key:'balance'},
+                      ]}
+                      size="small"
+                      rowClassName={() => 'card-list-row'}
+                    />
+                    <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                      提示：点击行查看卡片详情
+                    </div>
+                    <style>{`
+                      .card-list-row:hover {
+                        background-color: #f5f5f5;
+                      }
+                    `}</style>
+                  </div>
+                ) : (
+                  <Empty description="暂无卡片信息" />
+                )
+              )}
+            </div>
+          }
+          destroyTooltipOnHide
+        >
+          <Tag
+            color={text > 0 ? 'blue' : 'default'}
+            style={{ cursor: text > 0 ? 'pointer' : 'default' }}
+            onClick={()=> text>0 && handleTagClick(record)}
+          >
+            {text || 0}
+          </Tag>
+        </Popover>
       )
     },
   {
@@ -3467,11 +3501,171 @@ const AccountMonitor: React.FC = () => {
     );
   };
 
+  // KYC信息弹窗状态
+  const [kycModalVisible, setKycModalVisible] = useState<boolean>(false);
+  const [kycInfo, setKycInfo] = useState<any>(null);
+  const [loadingKycInfo, setLoadingKycInfo] = useState<boolean>(false);
+  const [selectedKycAccountId, setSelectedKycAccountId] = useState<string>('');
+  
+  // 查看KYC信息
+  const handleViewKycInfo = async (accountId: number, verificationLevel: number) => {
+    // 显示加载状态
+    setLoadingKycInfo(true);
+    setKycModalVisible(true);
+    setSelectedKycAccountId(accountId.toString());
+    
+    try {
+      // 获取KYC信息
+      const response = await api.get(`${API_BASE_URL}/api/infini-accounts/kyc/information/${accountId}`);
+      console.log('获取KYC信息响应:', response);
+      
+      if (response.data.success && response.data.data.kyc_information && response.data.data.kyc_information.length > 0) {
+        const kycInfoData = response.data.data.kyc_information[0];
+        
+        // 处理KYC认证中的状态
+        if (verificationLevel === 3 && (!kycInfoData.status || kycInfoData.status === 0)) {
+          kycInfoData.status = 1; // 验证中状态
+        }
+        
+        // 转换为前端组件需要的格式
+        const transformedInfo = {
+          id: kycInfoData.id,
+          isValid: verificationLevel === 2 ? true : Boolean(kycInfoData.is_valid),
+          type: kycInfoData.type,
+          s3Key: kycInfoData.s3_key,
+          firstName: kycInfoData.first_name,
+          lastName: kycInfoData.last_name,
+          country: kycInfoData.country,
+          phone: kycInfoData.phone,
+          phoneCode: kycInfoData.phone_code,
+          identificationNumber: kycInfoData.identification_number,
+          status: verificationLevel === 2 ? 2 : kycInfoData.status,
+          createdAt: kycInfoData.created_at,
+          imageUrl: kycInfoData.image_url
+        };
+        
+        setKycInfo(transformedInfo);
+      } else {
+        // 处理无KYC信息的情况
+        if (verificationLevel === 3) {
+          // KYC认证中状态，创建默认信息
+          setKycInfo({
+            id: accountId,
+            status: 1, // 验证中状态
+            isValid: false,
+            type: 0,
+            createdAt: Math.floor(Date.now() / 1000)
+          });
+        } else {
+          setKycInfo({});
+          message.warning('未查询到KYC信息');
+        }
+      }
+    } catch (error) {
+      console.error('获取KYC信息出错:', error);
+      message.error('获取KYC信息失败');
+      // 错误时也创建基本信息对象
+      if (verificationLevel === 3) {
+        setKycInfo({
+          id: accountId,
+          status: 1, // 验证中状态
+          isValid: false,
+          type: 0,
+          createdAt: Math.floor(Date.now() / 1000)
+        });
+      } else {
+        setKycInfo({});
+      }
+    } finally {
+      setLoadingKycInfo(false);
+    }
+  };
+  
+  // 关闭KYC信息弹窗
+  const handleCloseKycModal = () => {
+    setKycModalVisible(false);
+    setKycInfo(null);
+    setSelectedKycAccountId('');
+  };
+
   // 首次加载时使用分页API
   useEffect(() => {
     fetchPaginatedAccounts();
     fetchGroups();
   }, []);
+
+  // ==== 卡片列表弹窗状态 ====
+  const [cardListVisible, setCardListVisible] = useState<boolean>(false);
+  const [cardListLoading, setCardListLoading] = useState<boolean>(false);
+  const [cardList, setCardList] = useState<any[]>([]);
+  const [cardListAccount, setCardListAccount] = useState<InfiniAccount | null>(null);
+  const [activePopoverId, setActivePopoverId] = useState<number | null>(null);
+
+  const openCardListModal = async (account: InfiniAccount) => {
+    setCardListAccount(account);
+    setCardListVisible(true);
+    setCardListLoading(true);
+    try {
+      const res = await infiniCardApi.getCardList(account.id.toString());
+      if (res.success) {
+        setCardList(res.data.items || res.data || []);
+      } else {
+        message.error(res.message || '获取卡片列表失败');
+      }
+    } catch (e) {
+      console.error('获取卡片列表失败:', e);
+      message.error('获取卡片列表失败');
+    } finally {
+      setCardListLoading(false);
+    }
+  };
+
+  const closeCardListModal = () => {
+    setCardListVisible(false);
+    setCardList([]);
+    setCardListAccount(null);
+  };
+
+  const showCardDetail = (card: any) => {
+    if (!cardListAccount) return;
+    // 先关闭 Popover
+    setActivePopoverId(null);
+    // 直接设置当前选中的账户和卡片信息，打开卡片详情模态框
+    setSelectedAccountForCard(cardListAccount);
+    setSelectedCardInfo(card);
+    setCardDetailModalVisible(true);
+  };
+
+  // 独立函数：仅拉取并缓存卡片列表数据，不打开旧弹窗
+  const fetchCardListForAccount = async (account: InfiniAccount) => {
+    setCardListAccount(account);
+    setCardListLoading(true);
+    try {
+      const res = await infiniCardApi.getCardList(account.id.toString());
+      if (res.success) {
+        const cards = res.data?.items ?? res.data?.data ?? res.data ?? [];
+        setCardList(Array.isArray(cards) ? cards : []);
+      } else {
+        message.error(res.message || '获取卡片列表失败');
+        setCardList([]);
+      }
+    } catch (e) {
+      console.error('获取卡片列表失败:', e);
+      message.error('获取卡片列表失败');
+      setCardList([]);
+    } finally {
+      setCardListLoading(false);
+    }
+  };
+
+  const handleTagClick = (record: InfiniAccount) => {
+    if (activePopoverId === record.id) {
+      setActivePopoverId(null);
+    } else {
+      setActivePopoverId(record.id);
+      fetchCardListForAccount(record);
+    }
+  };
 
   return (
     <div>
@@ -3720,6 +3914,32 @@ const AccountMonitor: React.FC = () => {
           });
         }}
       />
+      {/* 卡片列表弹窗 */}
+      <Modal
+        visible={cardListVisible}
+        title={cardListAccount ? `${cardListAccount.email} 的卡片列表` : '卡片列表'}
+        onCancel={closeCardListModal}
+        footer={null}
+        width={800}
+      >
+        <Table
+          dataSource={cardList}
+          loading={cardListLoading}
+          rowKey={(r:any)=>r.card_id||r.id}
+          pagination={false}
+          onRow={(record:any)=>({
+            onClick: ()=> showCardDetail(record)
+          })}
+          columns={[
+            { title:'卡片ID', dataIndex:'card_id', key:'card_id'},
+            { title:'卡号后四位', dataIndex:'card_last_four_digits', key:'last4'},
+            { title:'状态', dataIndex:'status', key:'status'},
+            { title:'余额', dataIndex:'available_balance', key:'balance'},
+          ]}
+          size="small"
+        />
+        <p style={{fontSize:12,color:'#999'}}>点击行查看卡片详情</p>
+      </Modal>
     </div>
   );
 };
